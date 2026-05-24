@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Rust / Cargo
+src-tauri/target/
+
+# Vite build output
+dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
