@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ClockSettings } from "../domain/settings";
 import { createClockScheduler, type ClockScheduler } from "../services/clock-scheduler";
@@ -6,6 +6,7 @@ import { createDesktopClient, type DesktopClient } from "../services/desktop-cli
 import { useSettingsEvent } from "../services/use-settings-event";
 import { useVisibilityEvent } from "../services/use-visibility-event";
 import { AnalogClock } from "./AnalogClock";
+import { ContextMenu } from "./ContextMenu";
 import { DigitalClock } from "./DigitalClock";
 
 interface ClockAppProps {
@@ -18,6 +19,7 @@ export function ClockApp({ desktopClient }: ClockAppProps) {
 
   const [settings, setSettings] = useState<ClockSettings | null>(null);
   const [now, setNow] = useState<Date | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const settingsEvent = useSettingsEvent();
   const visibilityEvent = useVisibilityEvent();
@@ -85,6 +87,19 @@ export function ClockApp({ desktopClient }: ClockAppProps) {
     });
   }, [settings, visible]);
 
+  // --- Context menu ---
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      setMenuOpen(true);
+    },
+    [],
+  );
+
+  const handleMenuClose = useCallback(() => {
+    setMenuOpen(false);
+  }, []);
+
   // --- Render ---
   const renderClock = () => {
     if (settings === null || now === null) {
@@ -104,8 +119,16 @@ export function ClockApp({ desktopClient }: ClockAppProps) {
       data-tauri-drag-region
       className="clock-container"
       aria-label="時計"
+      onContextMenu={handleContextMenu}
     >
       {renderClock()}
+      {menuOpen && settings !== null && (
+        <ContextMenu
+          settings={settings}
+          desktopClient={client}
+          onClose={handleMenuClose}
+        />
+      )}
     </main>
   );
 }

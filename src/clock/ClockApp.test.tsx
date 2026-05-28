@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SettingsChangedPayload } from "../domain/events";
@@ -370,6 +370,86 @@ describe("ClockApp", () => {
         | undefined;
 
       expect(lastCall?.[0]?.visible).toBe(true);
+    });
+  });
+
+  describe("context menu", () => {
+    it("prevents default browser context menu on right-click", async () => {
+      const client = createMockDesktopClient();
+
+      await renderAndInitialize(client);
+
+      const container = screen.getByTestId("clock-page");
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+      });
+      const prevented = !container.dispatchEvent(event);
+
+      expect(prevented).toBe(true);
+    });
+
+    it("opens custom context menu on right-click", async () => {
+      const client = createMockDesktopClient();
+
+      await renderAndInitialize(client);
+
+      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
+
+      const container = screen.getByTestId("clock-page");
+
+      fireEvent.contextMenu(container);
+
+      expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+    });
+
+    it("does not show context menu before right-click", async () => {
+      const client = createMockDesktopClient();
+
+      await renderAndInitialize(client);
+
+      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
+    });
+
+    it("closes context menu after an action is performed", async () => {
+      const client = createMockDesktopClient();
+
+      await renderAndInitialize(client);
+
+      const container = screen.getByTestId("clock-page");
+
+      fireEvent.contextMenu(container);
+
+      expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("context-menu-quit"));
+
+      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
+    });
+
+    it("passes current settings to ContextMenu for alwaysOnTop state", async () => {
+      const settingsWithTopOn: ClockSettings = {
+        ...DEFAULT_CLOCK_SETTINGS,
+        alwaysOnTop: true,
+      };
+      const client = createMockDesktopClient({
+        initializeClockWindow: vi.fn(() =>
+          Promise.resolve({
+            settings: settingsWithTopOn,
+            persistence: "saved" as const,
+          }),
+        ),
+      });
+
+      await renderAndInitialize(client);
+
+      const container = screen.getByTestId("clock-page");
+
+      fireEvent.contextMenu(container);
+
+      const alwaysOnTopItem = screen.getByTestId("context-menu-always-on-top");
+
+      expect(alwaysOnTopItem).toHaveAttribute("aria-checked", "true");
     });
   });
 });
