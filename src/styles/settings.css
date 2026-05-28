@@ -1,0 +1,120 @@
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 360px;
+  padding: 24px;
+  font-family: "Segoe UI", sans-serif;
+  color: #e0e0e0;
+  background: #1e1e2e;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.settings-legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #a0a0b8;
+}
+
+.settings-radio-group {
+  display: flex;
+  gap: 16px;
+}
+
+.settings-radio-label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.settings-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-checkbox-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.settings-save-button {
+  padding: 8px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  cursor: pointer;
+  background: #4a6cf7;
+  border: none;
+  border-radius: 6px;
+}
+
+.settings-save-button:hover {
+  background: #3b5de7;
+}
+
+.settings-save-button:disabled {
+  cursor: not-allowed;
+  background: #3a3a4e;
+  opacity: 0.6;
+}
+
+.settings-volatile {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 180, 60, 0.12);
+  border: 1px solid rgba(255, 180, 60, 0.3);
+  border-radius: 6px;
+}
+
+.settings-volatile-text {
+  font-size: 13px;
+  color: #ffb43c;
+}
+
+.settings-retry-button {
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #ffb43c;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(255, 180, 60, 0.4);
+  border-radius: 4px;
+}
+
+.settings-retry-button:hover {
+  background: rgba(255, 180, 60, 0.1);
+}

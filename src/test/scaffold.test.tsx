@@ -62,7 +62,9 @@ describe("frontend entry scaffolding", () => {
   });
 
   it("provides a settings page root", () => {
-    render(<SettingsApp />);
+    const client = createStubDesktopClient();
+
+    render(<SettingsApp desktopClient={client} />);
 
     expect(screen.getByTestId("settings-page")).toBeInTheDocument();
   });
