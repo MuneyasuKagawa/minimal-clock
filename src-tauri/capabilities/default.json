@@ -7,6 +7,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "allow-native-runtime-capabilities"
+    "allow-native-runtime-capabilities",
+    "allow-initialize-clock-window"
   ]
 }
