@@ -2,6 +2,7 @@ mod commands;
 mod desktop_runtime;
 #[cfg(test)]
 mod host_config_tests;
+pub mod settings_store;
 
 use commands::native_runtime_capabilities;
 

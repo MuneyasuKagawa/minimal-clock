@@ -2,6 +2,9 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{App, Result};
 
+#[cfg(test)]
+use crate::settings_store::SETTINGS_STORE_FILE_NAME;
+
 const RESTORE_CLOCK_ID: &str = "restore-clock";
 const OPEN_SETTINGS_ID: &str = "open-settings";
 const QUIT_APPLICATION_ID: &str = "quit-application";
@@ -12,7 +15,7 @@ pub fn native_operation_ids() -> &'static [&'static str] {
 
 #[cfg(test)]
 pub fn settings_store_file_name() -> &'static str {
-    "clock-settings.json"
+    SETTINGS_STORE_FILE_NAME
 }
 
 pub fn register_tray(app: &mut App) -> Result<()> {
