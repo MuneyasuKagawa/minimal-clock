@@ -4,6 +4,9 @@ node_modules/
 # Rust / Cargo
 src-tauri/target/
 
+# Tauri generated schemas
+src-tauri/gen/
+
 # Vite build output
 dist/
 
