@@ -5,7 +5,8 @@ mod host_config_tests;
 pub mod settings_store;
 
 use commands::{
-    initialize_clock_window, native_runtime_capabilities, open_settings_window, quit_application,
+    apply_settings, get_applied_settings, initialize_clock_window, native_runtime_capabilities,
+    open_settings_window, quit_application, retry_settings_persistence,
 };
 
 pub fn run() {
@@ -22,7 +23,10 @@ pub fn run() {
             native_runtime_capabilities,
             initialize_clock_window,
             open_settings_window,
-            quit_application
+            quit_application,
+            get_applied_settings,
+            apply_settings,
+            retry_settings_persistence
         ])
         .run(tauri::generate_context!())
         .expect("failed to run minimal-clock desktop runtime");

@@ -10,6 +10,9 @@
     "allow-native-runtime-capabilities",
     "allow-initialize-clock-window",
     "allow-open-settings-window",
-    "allow-quit-application"
+    "allow-quit-application",
+    "allow-get-applied-settings",
+    "allow-apply-settings",
+    "allow-retry-settings-persistence"
   ]
 }

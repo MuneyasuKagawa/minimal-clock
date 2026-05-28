@@ -6,6 +6,9 @@ fn main() {
                 "initialize_clock_window",
                 "open_settings_window",
                 "quit_application",
+                "get_applied_settings",
+                "apply_settings",
+                "retry_settings_persistence",
             ]),
         ),
     )
