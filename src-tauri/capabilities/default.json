@@ -8,6 +8,8 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "allow-native-runtime-capabilities",
-    "allow-initialize-clock-window"
+    "allow-initialize-clock-window",
+    "allow-open-settings-window",
+    "allow-quit-application"
   ]
 }

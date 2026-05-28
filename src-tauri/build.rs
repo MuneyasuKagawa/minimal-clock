@@ -4,6 +4,8 @@ fn main() {
             tauri_build::AppManifest::new().commands(&[
                 "native_runtime_capabilities",
                 "initialize_clock_window",
+                "open_settings_window",
+                "quit_application",
             ]),
         ),
     )

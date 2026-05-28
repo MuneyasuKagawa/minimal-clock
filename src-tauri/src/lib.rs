@@ -4,7 +4,9 @@ mod desktop_runtime;
 mod host_config_tests;
 pub mod settings_store;
 
-use commands::{initialize_clock_window, native_runtime_capabilities};
+use commands::{
+    initialize_clock_window, native_runtime_capabilities, open_settings_window, quit_application,
+};
 
 pub fn run() {
     tauri::Builder::default()
@@ -18,7 +20,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             native_runtime_capabilities,
-            initialize_clock_window
+            initialize_clock_window,
+            open_settings_window,
+            quit_application
         ])
         .run(tauri::generate_context!())
         .expect("failed to run minimal-clock desktop runtime");

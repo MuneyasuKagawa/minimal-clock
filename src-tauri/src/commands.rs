@@ -2,9 +2,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::desktop_runtime::{
-    self, compute_initial_position, ClockWindowState, ClockWindowVisibilityPayload, DesktopError,
-    RuntimeState, SettingsChangedPayload, CLOCK_WINDOW_LABEL, SETTINGS_CHANGED_EVENT,
-    SETTINGS_WINDOW_LABEL, VISIBILITY_EVENT,
+    self, compute_initial_position, should_open_settings, ClockWindowState,
+    ClockWindowVisibilityPayload, DesktopError, RuntimeState, SettingsChangedPayload,
+    CLOCK_WINDOW_LABEL, SETTINGS_CHANGED_EVENT, SETTINGS_WINDOW_LABEL, VISIBILITY_EVENT,
 };
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -128,6 +128,38 @@ pub fn initialize_clock_window(
     );
 
     Ok(payload)
+}
+
+#[tauri::command]
+pub fn open_settings_window(
+    app: AppHandle,
+    state: State<'_, RuntimeState>,
+) -> Result<(), DesktopError> {
+    let allowed = {
+        let guard = state.lock().map_err(|_| DesktopError {
+            kind: "runtime-failure".to_string(),
+            operation: "open_settings_window".to_string(),
+            message: "failed to acquire runtime state lock".to_string(),
+        })?;
+        should_open_settings(&guard)
+    };
+
+    if !allowed {
+        return Err(DesktopError {
+            kind: "runtime-failure".to_string(),
+            operation: "open_settings_window".to_string(),
+            message: "application is exiting".to_string(),
+        });
+    }
+
+    desktop_runtime::show_or_focus_settings_window(&app);
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn quit_application(app: AppHandle) {
+    desktop_runtime::exit_application(&app);
 }
 
 #[cfg(test)]

@@ -73,6 +73,58 @@ impl std::fmt::Display for DesktopError {
     }
 }
 
+// --- Tray action results (pure, testable) ---
+
+/// Result of evaluating a restore-clock action against current state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RestoreClockResult {
+    /// Clock window should be shown and state transitions to Visible.
+    Restored {
+        payload: SettingsChangedPayload,
+    },
+    /// Restore is a no-op because the clock is already visible or exiting.
+    NoOp,
+}
+
+/// Evaluates whether restore-clock should proceed and returns the outcome.
+/// Does NOT mutate state — caller applies the transition.
+pub fn resolve_restore_clock(state: &AppliedState) -> RestoreClockResult {
+    match state.window_state {
+        ClockWindowState::HiddenToTray | ClockWindowState::HiddenUntilInitialized => {
+            RestoreClockResult::Restored {
+                payload: SettingsChangedPayload {
+                    settings: state.settings.clone(),
+                    persistence: state.persistence.clone(),
+                },
+            }
+        }
+        ClockWindowState::Visible | ClockWindowState::Exiting => RestoreClockResult::NoOp,
+    }
+}
+
+/// Result of evaluating a quit action against current state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuitResult {
+    /// App should exit — state transitions to Exiting.
+    Exit,
+    /// Already exiting — no-op.
+    AlreadyExiting,
+}
+
+/// Evaluates whether quit should proceed.
+pub fn resolve_quit(state: &AppliedState) -> QuitResult {
+    match state.window_state {
+        ClockWindowState::Exiting => QuitResult::AlreadyExiting,
+        _ => QuitResult::Exit,
+    }
+}
+
+/// Returns true if the settings window open request should be serviced.
+/// Blocked only when the app is exiting.
+pub fn should_open_settings(state: &AppliedState) -> bool {
+    state.window_state != ClockWindowState::Exiting
+}
+
 // --- Pure logic ---
 
 pub fn compute_initial_position(
@@ -134,8 +186,15 @@ pub fn register_tray(app: &mut App) -> Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            QUIT_APPLICATION_ID => app.exit(0),
-            RESTORE_CLOCK_ID | OPEN_SETTINGS_ID => {}
+            RESTORE_CLOCK_ID => {
+                handle_tray_restore(app);
+            }
+            OPEN_SETTINGS_ID => {
+                handle_tray_open_settings(app);
+            }
+            QUIT_APPLICATION_ID => {
+                handle_tray_quit(app);
+            }
             _ => {}
         })
         .build(app)?;
@@ -180,6 +239,104 @@ pub fn register_close_to_hide(app: &mut App) -> Result<()> {
     });
 
     Ok(())
+}
+
+// --- Tray event handlers ---
+
+fn handle_tray_restore(app: &tauri::AppHandle) {
+    let state = app.state::<RuntimeState>();
+    let restore_result = {
+        let guard = state.lock().expect("runtime state lock poisoned");
+        resolve_restore_clock(&guard)
+    };
+
+    match restore_result {
+        RestoreClockResult::Restored { payload } => {
+            // Update state to Visible
+            {
+                let mut guard = state.lock().expect("runtime state lock poisoned");
+                guard.window_state = ClockWindowState::Visible;
+            }
+
+            // Show and focus the main window
+            if let Some(window) = app.get_webview_window(CLOCK_WINDOW_LABEL) {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
+            // Emit visibility event
+            let _ = app.emit_to(
+                CLOCK_WINDOW_LABEL,
+                VISIBILITY_EVENT,
+                ClockWindowVisibilityPayload { visible: true },
+            );
+
+            // Emit settings changed so clock can resync
+            let _ = app.emit_to(CLOCK_WINDOW_LABEL, SETTINGS_CHANGED_EVENT, &payload);
+            let _ = app.emit_to(SETTINGS_WINDOW_LABEL, SETTINGS_CHANGED_EVENT, &payload);
+        }
+        RestoreClockResult::NoOp => {}
+    }
+}
+
+fn handle_tray_open_settings(app: &tauri::AppHandle) {
+    let state = app.state::<RuntimeState>();
+    let allowed = {
+        let guard = state.lock().expect("runtime state lock poisoned");
+        should_open_settings(&guard)
+    };
+
+    if !allowed {
+        return;
+    }
+
+    show_or_focus_settings_window(app);
+}
+
+fn handle_tray_quit(app: &tauri::AppHandle) {
+    let state = app.state::<RuntimeState>();
+    let result = {
+        let guard = state.lock().expect("runtime state lock poisoned");
+        resolve_quit(&guard)
+    };
+
+    match result {
+        QuitResult::Exit => {
+            {
+                let mut guard = state.lock().expect("runtime state lock poisoned");
+                guard.window_state = ClockWindowState::Exiting;
+            }
+            app.exit(0);
+        }
+        QuitResult::AlreadyExiting => {}
+    }
+}
+
+// --- Shared window helpers ---
+
+/// Shows the settings window if it exists, focusing it if already visible.
+/// Creates no new windows — the settings window is defined in tauri.conf.json
+/// and created at startup in a hidden state.
+pub fn show_or_focus_settings_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.set_focus();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+/// Sets state to Exiting and exits the application.
+pub fn exit_application(app: &tauri::AppHandle) {
+    let state = app.state::<RuntimeState>();
+    {
+        let mut guard = state.lock().expect("runtime state lock poisoned");
+        guard.window_state = ClockWindowState::Exiting;
+    }
+    app.exit(0);
 }
 
 /// Loads settings from the store and initializes the runtime applied state.
@@ -407,5 +564,137 @@ mod tests {
         let json = serde_json::to_value(&payload).unwrap();
 
         assert_eq!(json["visible"], false);
+    }
+
+    // --- resolve_restore_clock tests ---
+
+    fn make_state(window_state: ClockWindowState) -> AppliedState {
+        AppliedState {
+            settings: default_clock_settings(),
+            persistence: "saved".to_string(),
+            window_state,
+        }
+    }
+
+    #[test]
+    fn restore_from_hidden_to_tray_produces_restored_with_settings_payload() {
+        let state = make_state(ClockWindowState::HiddenToTray);
+
+        let result = resolve_restore_clock(&state);
+
+        assert_eq!(
+            result,
+            RestoreClockResult::Restored {
+                payload: SettingsChangedPayload {
+                    settings: default_clock_settings(),
+                    persistence: "saved".to_string(),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn restore_from_hidden_until_initialized_produces_restored() {
+        let state = make_state(ClockWindowState::HiddenUntilInitialized);
+
+        let result = resolve_restore_clock(&state);
+
+        assert!(matches!(result, RestoreClockResult::Restored { .. }));
+    }
+
+    #[test]
+    fn restore_when_already_visible_is_noop() {
+        let state = make_state(ClockWindowState::Visible);
+
+        let result = resolve_restore_clock(&state);
+
+        assert_eq!(result, RestoreClockResult::NoOp);
+    }
+
+    #[test]
+    fn restore_when_exiting_is_noop() {
+        let state = make_state(ClockWindowState::Exiting);
+
+        let result = resolve_restore_clock(&state);
+
+        assert_eq!(result, RestoreClockResult::NoOp);
+    }
+
+    #[test]
+    fn restore_payload_carries_volatile_persistence_when_state_is_volatile() {
+        let state = AppliedState {
+            settings: default_clock_settings(),
+            persistence: "volatile".to_string(),
+            window_state: ClockWindowState::HiddenToTray,
+        };
+
+        let result = resolve_restore_clock(&state);
+
+        match result {
+            RestoreClockResult::Restored { payload } => {
+                assert_eq!(payload.persistence, "volatile");
+            }
+            _ => panic!("expected Restored"),
+        }
+    }
+
+    // --- resolve_quit tests ---
+
+    #[test]
+    fn quit_from_visible_produces_exit() {
+        let state = make_state(ClockWindowState::Visible);
+
+        assert_eq!(resolve_quit(&state), QuitResult::Exit);
+    }
+
+    #[test]
+    fn quit_from_hidden_to_tray_produces_exit() {
+        let state = make_state(ClockWindowState::HiddenToTray);
+
+        assert_eq!(resolve_quit(&state), QuitResult::Exit);
+    }
+
+    #[test]
+    fn quit_from_hidden_until_initialized_produces_exit() {
+        let state = make_state(ClockWindowState::HiddenUntilInitialized);
+
+        assert_eq!(resolve_quit(&state), QuitResult::Exit);
+    }
+
+    #[test]
+    fn quit_when_already_exiting_is_already_exiting() {
+        let state = make_state(ClockWindowState::Exiting);
+
+        assert_eq!(resolve_quit(&state), QuitResult::AlreadyExiting);
+    }
+
+    // --- should_open_settings tests ---
+
+    #[test]
+    fn settings_allowed_when_visible() {
+        let state = make_state(ClockWindowState::Visible);
+
+        assert!(should_open_settings(&state));
+    }
+
+    #[test]
+    fn settings_allowed_when_hidden_to_tray() {
+        let state = make_state(ClockWindowState::HiddenToTray);
+
+        assert!(should_open_settings(&state));
+    }
+
+    #[test]
+    fn settings_allowed_when_hidden_until_initialized() {
+        let state = make_state(ClockWindowState::HiddenUntilInitialized);
+
+        assert!(should_open_settings(&state));
+    }
+
+    #[test]
+    fn settings_blocked_when_exiting() {
+        let state = make_state(ClockWindowState::Exiting);
+
+        assert!(!should_open_settings(&state));
     }
 }
