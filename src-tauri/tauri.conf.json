@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Minimal Clock",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.local.minimal-clock",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -50,8 +50,14 @@
     "windows": {
       "nsis": {
         "languages": [
-          "Japanese", "English", "Spanish", "Italian",
-          "French", "Russian", "SimpChinese", "Korean"
+          "Japanese",
+          "English",
+          "Spanish",
+          "Italian",
+          "French",
+          "Russian",
+          "SimpChinese",
+          "Korean"
         ],
         "displayLanguageSelector": true
       }

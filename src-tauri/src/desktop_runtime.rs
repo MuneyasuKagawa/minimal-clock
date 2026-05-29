@@ -176,7 +176,7 @@ pub fn compute_initial_position(
 pub fn init_applied_state(load_result: SettingsLoadResult) -> AppliedState {
     let (settings, persistence) = match load_result {
         SettingsLoadResult::Loaded { settings } => (settings, "saved".to_string()),
-        SettingsLoadResult::Defaulted { settings, .. } => (settings, "volatile".to_string()),
+        SettingsLoadResult::Defaulted { settings, .. } => (settings, "saved".to_string()),
     };
 
     AppliedState {
