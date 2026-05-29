@@ -45,6 +45,24 @@
   "bundle": {
     "active": true,
     "icon": ["icons/icon.ico"],
-    "targets": "all"
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Japanese", "English", "Spanish", "Italian",
+          "French", "Russian", "SimpChinese", "Korean"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://minimal-clock-releases.s3.ap-northeast-1.amazonaws.com/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDN0VGOTg1RTM5RkI3QwpSV1I4K3psZW1PL0hDMFVVRjhFbTFUMkQwa3duTjNLUjhxeFJGbDZzUkVrKzlZQ1FlaWlZaDJZRQo="
+    }
   }
 }

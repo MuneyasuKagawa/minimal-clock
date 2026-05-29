@@ -20,6 +20,8 @@
     "allow-quit-application",
     "allow-get-applied-settings",
     "allow-apply-settings",
-    "allow-retry-settings-persistence"
+    "allow-retry-settings-persistence",
+    "dialog:allow-ask",
+    "updater:default"
   ]
 }

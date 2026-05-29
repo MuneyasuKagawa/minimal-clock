@@ -7,6 +7,7 @@ import { createClockScheduler, type ClockScheduler } from "../services/clock-sch
 import { createDesktopClient, type DesktopClient } from "../services/desktop-client";
 import { useSettingsEvent } from "../services/use-settings-event";
 import { useVisibilityEvent } from "../services/use-visibility-event";
+import { useUpdater } from "../services/use-updater";
 import { showClockContextMenu } from "./context-menu-native";
 import { AnalogClock } from "./AnalogClock";
 import { DigitalClock } from "./DigitalClock";
@@ -23,6 +24,7 @@ export function ClockApp({ desktopClient }: ClockAppProps) {
   const [settings, setSettings] = useState<ClockSettings | null>(null);
   const [now, setNow] = useState<Date | null>(null);
 
+  useUpdater();
   const settingsEvent = useSettingsEvent();
   const visibilityEvent = useVisibilityEvent();
 

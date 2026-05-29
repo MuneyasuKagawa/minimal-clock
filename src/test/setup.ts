@@ -20,6 +20,14 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
   }),
 }));
 
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: () => Promise.resolve(null),
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  ask: () => Promise.resolve(false),
+}));
+
 vi.mock("@tauri-apps/api/menu", () => ({
   Menu: { new: () => Promise.resolve({ popup: () => Promise.resolve() }) },
   MenuItem: { new: (opts: Record<string, unknown>) => Promise.resolve(opts) },

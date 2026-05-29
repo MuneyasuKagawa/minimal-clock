@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src-tauri/tauri.conf.json"
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: check
+        run: |
+          CURRENT=$(jq -r '.version' src-tauri/tauri.conf.json)
+          PREVIOUS=$(git show HEAD~1:src-tauri/tauri.conf.json 2>/dev/null | jq -r '.version' 2>/dev/null || echo "")
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-windows:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: windows-latest
+    outputs:
+      signature: ${{ steps.sig.outputs.signature }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build
+
+      - name: Read signature
+        id: sig
+        working-directory: src-tauri/target/release/bundle/nsis
+        shell: bash
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          SIG=$(cat "Minimal Clock_${VERSION}_x64-setup.exe.sig")
+          echo "signature=$SIG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to S3
+        working-directory: src-tauri/target/release/bundle/nsis
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-northeast-1
+        run: |
+          $VERSION = "${{ needs.check-version.outputs.version }}"
+          aws s3 cp "Minimal Clock_${VERSION}_x64-setup.exe" "s3://minimal-clock-releases/Minimal Clock_${VERSION}_x64-setup.exe"
+
+  publish:
+    needs: [check-version, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate and upload latest.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-northeast-1
+          VERSION: ${{ needs.check-version.outputs.version }}
+          SIG_WIN: ${{ needs.build-windows.outputs.signature }}
+        run: |
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "v${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${SIG_WIN}",
+                "url": "https://minimal-clock-releases.s3.ap-northeast-1.amazonaws.com/Minimal+Clock_${VERSION}_x64-setup.exe"
+              }
+            }
+          }
+          EOF
+          aws s3 cp latest.json s3://minimal-clock-releases/latest.json

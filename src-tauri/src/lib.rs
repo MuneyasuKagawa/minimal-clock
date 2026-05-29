@@ -11,6 +11,8 @@ use commands::{
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .manage(desktop_runtime::create_initial_runtime_state())
         .setup(|app| {

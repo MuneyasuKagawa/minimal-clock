@@ -1,5 +1,6 @@
 [env]
 _.path = ["C:/Users/muneyasu/.cargo/bin"]
+_.file = ".env"
 
 [tasks."frontend:dev"]
 description = "Start the Vite development server for frontend-only work"
