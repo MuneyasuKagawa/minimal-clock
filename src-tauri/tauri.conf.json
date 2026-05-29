@@ -18,27 +18,24 @@
         "visible": false,
         "decorations": false,
         "transparent": true,
+        "shadow": false,
         "resizable": false,
         "skipTaskbar": true,
-        "width": 220,
-        "height": 88,
-        "minWidth": 220,
-        "maxWidth": 220,
-        "minHeight": 88,
-        "maxHeight": 88
+        "width": 300,
+        "height": 300
       },
       {
         "label": "settings",
         "title": "Minimal Clock Settings",
         "url": "settings.html",
         "visible": false,
-        "decorations": true,
-        "transparent": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "shadow": false,
         "resizable": false,
-        "width": 360,
-        "height": 420,
-        "minWidth": 360,
-        "minHeight": 420
+        "width": 320,
+        "height": 600
       }
     ],
     "security": {

@@ -6,10 +6,14 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{App, Emitter, Manager, Result};
 use tauri_plugin_store::StoreExt;
 
+use serde::Deserialize;
+
 use crate::settings_store::{
     default_clock_settings, ClockSettings, PersistentSettingsStore, SettingsLoadResult,
     SettingsStore, TauriStoreBackend, SETTINGS_STORE_FILE_NAME,
 };
+
+const WINDOW_POSITION_KEY: &str = "windowPosition";
 
 const RESTORE_CLOCK_ID: &str = "restore-clock";
 const OPEN_SETTINGS_ID: &str = "open-settings";
@@ -125,6 +129,31 @@ pub fn should_open_settings(state: &AppliedState) -> bool {
     state.window_state != ClockWindowState::Exiting
 }
 
+// --- Window position persistence ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SavedPosition {
+    x: f64,
+    y: f64,
+}
+
+pub fn save_window_position(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window(CLOCK_WINDOW_LABEL) else { return };
+    let Ok(pos) = window.outer_position() else { return };
+    let Ok(store) = app.store(SETTINGS_STORE_FILE_NAME) else { return };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let saved = SavedPosition { x: pos.x as f64 / scale, y: pos.y as f64 / scale };
+    store.set(WINDOW_POSITION_KEY, serde_json::to_value(&saved).unwrap_or_default());
+    let _ = store.save();
+}
+
+pub fn load_saved_position(app: &tauri::AppHandle) -> Option<(f64, f64)> {
+    let store = app.store(SETTINGS_STORE_FILE_NAME).ok()?;
+    let value = store.get(WINDOW_POSITION_KEY)?;
+    let saved: SavedPosition = serde_json::from_value(value).ok()?;
+    Some((saved.x, saved.y))
+}
+
 // --- Pure logic ---
 
 pub fn compute_initial_position(
@@ -177,12 +206,14 @@ pub fn create_initial_runtime_state() -> RuntimeState {
 }
 
 pub fn register_tray(app: &mut App) -> Result<()> {
-    let restore = MenuItem::with_id(app, RESTORE_CLOCK_ID, "時計を表示", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, OPEN_SETTINGS_ID, "設定", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT_APPLICATION_ID, "終了", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&restore, &settings, &quit])?;
+    let menu = Menu::with_items(app, &[&settings, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
+        .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))
+            .expect("failed to load tray icon"))
+        .tooltip("Minimal Clock")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -214,27 +245,11 @@ pub fn register_close_to_hide(app: &mut App) -> Result<()> {
 
     main_window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-
             let state = app_handle.state::<RuntimeState>();
-            let mut guard = state.lock().expect("runtime state lock poisoned");
-
-            if guard.window_state == ClockWindowState::Exiting {
-                return;
+            let guard = state.lock().expect("runtime state lock poisoned");
+            if guard.window_state != ClockWindowState::Exiting {
+                api.prevent_close();
             }
-
-            guard.window_state = ClockWindowState::HiddenToTray;
-            drop(guard);
-
-            if let Some(window) = app_handle.get_webview_window(CLOCK_WINDOW_LABEL) {
-                let _ = window.hide();
-            }
-
-            let _ = app_handle.emit_to(
-                CLOCK_WINDOW_LABEL,
-                VISIBILITY_EVENT,
-                ClockWindowVisibilityPayload { visible: false },
-            );
         }
     });
 
@@ -318,19 +333,53 @@ fn handle_tray_quit(app: &tauri::AppHandle) {
 /// Creates no new windows — the settings window is defined in tauri.conf.json
 /// and created at startup in a hidden state.
 pub fn show_or_focus_settings_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
-        let is_visible = window.is_visible().unwrap_or(false);
-        if is_visible {
-            let _ = window.set_focus();
-        } else {
-            let _ = window.show();
-            let _ = window.set_focus();
+    let Some(settings_window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) else { return };
+
+    if settings_window.is_visible().unwrap_or(false) {
+        let _ = settings_window.set_focus();
+        return;
+    }
+
+    if let Some(clock_window) = app.get_webview_window(CLOCK_WINDOW_LABEL) {
+        if let (Ok(clock_pos), Ok(settings_size)) =
+            (clock_window.outer_position(), settings_window.outer_size())
+        {
+            let scale = clock_window.scale_factor().unwrap_or(1.0);
+            let sw = settings_size.width as f64 / scale;
+            let sh = settings_size.height as f64 / scale;
+
+            let mut x = clock_pos.x as f64 / scale;
+            let mut y = clock_pos.y as f64 / scale + 50.0;
+
+            if let Some(monitor) = app.primary_monitor().ok().flatten() {
+                let mon_w = monitor.size().width as f64 / scale;
+                let mon_h = monitor.size().height as f64 / scale;
+
+                if x + sw > mon_w {
+                    x = mon_w - sw - 8.0;
+                }
+                if x < 0.0 {
+                    x = 8.0;
+                }
+                if y + sh > mon_h {
+                    y = clock_pos.y as f64 / scale - sh - 8.0;
+                }
+                if y < 0.0 {
+                    y = 8.0;
+                }
+            }
+
+            let _ = settings_window.set_position(tauri::LogicalPosition::new(x, y));
         }
     }
+
+    let _ = settings_window.show();
+    let _ = settings_window.set_focus();
 }
 
 /// Sets state to Exiting and exits the application.
 pub fn exit_application(app: &tauri::AppHandle) {
+    save_window_position(app);
     let state = app.state::<RuntimeState>();
     {
         let mut guard = state.lock().expect("runtime state lock poisoned");
@@ -371,7 +420,7 @@ pub fn initialize_applied_state(app: &App) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings_store::{ClockMode, ClockSettings, SettingsDefaultReason};
+    use crate::settings_store::{ClockStyle, ClockSettings, SettingsDefaultReason};
 
     // --- compute_initial_position tests ---
 
@@ -428,11 +477,12 @@ mod tests {
     #[test]
     fn loaded_settings_produce_saved_persistence() {
         let settings = ClockSettings {
-            mode: ClockMode::Analog,
+            clock_style: ClockStyle::AnalogSimple,
             show_seconds: false,
             hour24: false,
             show_date: true,
             always_on_top: false,
+            ..default_clock_settings()
         };
         let load_result = SettingsLoadResult::Loaded {
             settings: settings.clone(),
@@ -551,7 +601,7 @@ mod tests {
         let json = serde_json::to_value(&payload).unwrap();
 
         assert_eq!(json["persistence"], "saved");
-        assert_eq!(json["settings"]["mode"], "digital");
+        assert_eq!(json["settings"]["clockStyle"], "digital");
         assert_eq!(json["settings"]["showSeconds"], true);
         assert_eq!(json["settings"]["hour24"], true);
         assert_eq!(json["settings"]["showDate"], false);

@@ -44,7 +44,7 @@ describe("events contract", () => {
     ).toBe(false);
     expect(
       isSettingsChangedPayload({
-        settings: { ...DEFAULT_CLOCK_SETTINGS, mode: "compact" },
+        settings: { ...DEFAULT_CLOCK_SETTINGS, clockStyle: "compact" },
         persistence: "saved"
       })
     ).toBe(false);

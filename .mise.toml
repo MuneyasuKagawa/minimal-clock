@@ -1,0 +1,18 @@
+[env]
+_.path = ["C:/Users/muneyasu/.cargo/bin"]
+
+[tasks."frontend:dev"]
+description = "Start the Vite development server for frontend-only work"
+run = "npm run dev"
+
+[tasks."frontend:build"]
+description = "Type-check and build the frontend entries"
+run = "npm run build"
+
+[tasks.dev]
+description = "Start the Tauri desktop app"
+run = "npm run tauri:dev"
+
+[tasks.build]
+description = "Build the Tauri desktop app"
+run = "npm run tauri:build"

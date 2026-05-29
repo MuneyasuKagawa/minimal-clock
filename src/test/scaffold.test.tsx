@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_CLOCK_SETTINGS } from "../domain/settings";
@@ -24,29 +24,17 @@ vi.mock("../services/clock-scheduler", () => ({
 function createStubDesktopClient(): DesktopClient {
   return {
     initializeClockWindow: vi.fn(() =>
-      Promise.resolve({
-        settings: DEFAULT_CLOCK_SETTINGS,
-        persistence: "saved" as const,
-      }),
+      Promise.resolve({ settings: DEFAULT_CLOCK_SETTINGS, persistence: "saved" as const }),
     ),
     openSettingsWindow: vi.fn(() => Promise.resolve()),
     getAppliedSettings: vi.fn(() =>
-      Promise.resolve({
-        settings: DEFAULT_CLOCK_SETTINGS,
-        persistence: "saved" as const,
-      }),
+      Promise.resolve({ settings: DEFAULT_CLOCK_SETTINGS, persistence: "saved" as const }),
     ),
     applySettings: vi.fn(() =>
-      Promise.resolve({
-        settings: DEFAULT_CLOCK_SETTINGS,
-        persistence: "saved" as const,
-      }),
+      Promise.resolve({ settings: DEFAULT_CLOCK_SETTINGS, persistence: "saved" as const }),
     ),
     retrySettingsPersistence: vi.fn(() =>
-      Promise.resolve({
-        settings: DEFAULT_CLOCK_SETTINGS,
-        persistence: "saved" as const,
-      }),
+      Promise.resolve({ settings: DEFAULT_CLOCK_SETTINGS, persistence: "saved" as const }),
     ),
     quitApplication: vi.fn(() => Promise.resolve()),
   };
@@ -55,17 +43,14 @@ function createStubDesktopClient(): DesktopClient {
 describe("frontend entry scaffolding", () => {
   it("provides a clock page root", () => {
     const client = createStubDesktopClient();
-
     render(<ClockApp desktopClient={client} />);
-
     expect(screen.getByTestId("clock-page")).toBeInTheDocument();
   });
 
-  it("provides a settings page root", () => {
+  it("provides a settings page root", async () => {
     const client = createStubDesktopClient();
-
     render(<SettingsApp desktopClient={client} />);
-
+    await act(async () => {});
     expect(screen.getByTestId("settings-page")).toBeInTheDocument();
   });
 });

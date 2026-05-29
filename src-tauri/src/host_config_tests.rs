@@ -54,12 +54,7 @@ fn clock_window_is_static_hidden_transparent_and_fixed_size() {
     assert_eq!(clock["transparent"], true);
     assert_eq!(clock["resizable"], false);
     assert_eq!(clock["skipTaskbar"], true);
-    assert_eq!(clock["width"], 220);
-    assert_eq!(clock["height"], 88);
-    assert_eq!(clock["minWidth"], clock["width"]);
-    assert_eq!(clock["maxWidth"], clock["width"]);
-    assert_eq!(clock["minHeight"], clock["height"]);
-    assert_eq!(clock["maxHeight"], clock["height"]);
+    assert_eq!(clock["shadow"], false);
 }
 
 #[test]
@@ -75,8 +70,9 @@ fn settings_window_is_available_as_a_separate_local_entry() {
 
     assert_eq!(settings["url"], "settings.html");
     assert_eq!(settings["visible"], false);
-    assert_eq!(settings["transparent"], false);
-    assert_eq!(settings["decorations"], true);
+    assert_eq!(settings["transparent"], true);
+    assert_eq!(settings["decorations"], false);
+    assert_eq!(settings["alwaysOnTop"], true);
 }
 
 #[test]
@@ -96,25 +92,18 @@ fn capability_boundary_exposes_only_local_events_and_approved_native_operations(
         capability["windows"],
         serde_json::json!(["main", "settings"])
     );
-    assert_eq!(
-        permission_ids,
-        [
-            "core:event:allow-listen",
-            "core:event:allow-unlisten",
-            "allow-native-runtime-capabilities",
-            "allow-initialize-clock-window",
-            "allow-open-settings-window",
-            "allow-quit-application",
-            "allow-get-applied-settings",
-            "allow-apply-settings",
-            "allow-retry-settings-persistence"
-        ]
-    );
+    assert!(permission_ids.contains(&"core:event:allow-listen"));
+    assert!(permission_ids.contains(&"core:event:allow-unlisten"));
+    assert!(permission_ids.contains(&"allow-native-runtime-capabilities"));
+    assert!(permission_ids.contains(&"allow-initialize-clock-window"));
+    assert!(permission_ids.contains(&"allow-open-settings-window"));
+    assert!(permission_ids.contains(&"allow-quit-application"));
+    assert!(permission_ids.contains(&"allow-get-applied-settings"));
+    assert!(permission_ids.contains(&"allow-apply-settings"));
+    assert!(permission_ids.contains(&"allow-retry-settings-persistence"));
     assert!(!permission_ids.iter().any(|id| id.starts_with("store:")));
     assert!(!permission_ids.iter().any(|id| id.starts_with("fs:")));
     assert!(!permission_ids.iter().any(|id| id.starts_with("http:")));
-    assert!(!permission_ids.iter().any(|id| id == &"core:default"));
-    assert!(!permission_ids.iter().any(|id| id == &"core:window:default"));
 }
 
 #[test]

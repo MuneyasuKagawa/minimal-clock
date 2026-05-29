@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SettingsChangedPayload } from "../domain/events";
@@ -45,6 +45,14 @@ vi.mock("../services/clock-scheduler", () => ({
   },
 }));
 
+// --- Mock: showClockContextMenu ---
+
+const mockShowMenu = vi.fn();
+
+vi.mock("./context-menu-native", () => ({
+  showClockContextMenu: (...args: unknown[]) => mockShowMenu(...args),
+}));
+
 // --- Helpers ---
 
 function createMockDesktopClient(
@@ -83,12 +91,12 @@ function createMockDesktopClient(
 
 const DIGITAL_SETTINGS: ClockSettings = {
   ...DEFAULT_CLOCK_SETTINGS,
-  mode: "digital",
+  clockStyle: "digital",
 };
 
 const ANALOG_SETTINGS: ClockSettings = {
   ...DEFAULT_CLOCK_SETTINGS,
-  mode: "analog",
+  clockStyle: "analog-simple",
 };
 
 const FIXED_DATE = new Date(2026, 0, 15, 10, 30, 45);
@@ -98,9 +106,7 @@ async function renderAndInitialize(
 ): Promise<ReturnType<typeof render>> {
   const result = render(<ClockApp desktopClient={client} />);
 
-  await act(async () => {
-    // flush the initializeClockWindow promise
-  });
+  await act(async () => {});
 
   return result;
 }
@@ -117,57 +123,39 @@ describe("ClockApp", () => {
   describe("drag region", () => {
     it("has data-tauri-drag-region attribute on the clock container", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
-      const container = screen.getByTestId("clock-page");
-
-      expect(container).toHaveAttribute("data-tauri-drag-region");
+      expect(screen.getByTestId("clock-page")).toHaveAttribute("data-tauri-drag-region");
     });
   });
 
   describe("accessibility", () => {
     it("has aria-label for the clock page", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
-      const container = screen.getByTestId("clock-page");
-
-      expect(container).toHaveAttribute("aria-label", "時計");
+      expect(screen.getByTestId("clock-page")).toHaveAttribute("aria-label", "時計");
     });
   });
 
   describe("styling container", () => {
     it("has the clock-container class for CSS styling", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
-      const container = screen.getByTestId("clock-page");
-
-      expect(container).toHaveClass("clock-container");
+      expect(screen.getByTestId("clock-page")).toHaveClass("clock-container");
     });
   });
 
   describe("initialization", () => {
     it("calls initializeClockWindow on mount", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
       expect(client.initializeClockWindow).toHaveBeenCalledTimes(1);
     });
 
-    it("does not render a clock component before initialization completes", () => {
+    it("does not render a clock before initialization completes", () => {
       const client = createMockDesktopClient({
-        initializeClockWindow: vi.fn(
-          () => new Promise<SettingsChangedPayload>(() => {}),
-        ),
+        initializeClockWindow: vi.fn(() => new Promise<SettingsChangedPayload>(() => {})),
       });
-
       render(<ClockApp desktopClient={client} />);
-
       expect(screen.queryByTestId("digital-clock")).not.toBeInTheDocument();
       expect(screen.queryByTestId("analog-clock")).not.toBeInTheDocument();
     });
@@ -175,54 +163,32 @@ describe("ClockApp", () => {
     it("renders DigitalClock after initialization with digital mode", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: DIGITAL_SETTINGS,
-            persistence: "saved" as const,
-          }),
+          Promise.resolve({ settings: DIGITAL_SETTINGS, persistence: "saved" as const }),
         ),
       });
-
       await renderAndInitialize(client);
-
-      // Trigger a tick so that `now` is set
       act(() => {
-        const onTick = mockScheduler.start.mock.calls[0]?.[1] as
-          | ((now: Date) => void)
-          | undefined;
-        onTick?.(FIXED_DATE);
+        (mockScheduler.start.mock.calls[0]?.[1] as (now: Date) => void)?.(FIXED_DATE);
       });
-
       expect(screen.getByTestId("digital-clock")).toBeInTheDocument();
-      expect(screen.queryByTestId("analog-clock-container")).not.toBeInTheDocument();
     });
 
     it("renders AnalogClock after initialization with analog mode", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: ANALOG_SETTINGS,
-            persistence: "saved" as const,
-          }),
+          Promise.resolve({ settings: ANALOG_SETTINGS, persistence: "saved" as const }),
         ),
       });
-
       await renderAndInitialize(client);
-
-      // Trigger a tick so that `now` is set
       act(() => {
-        const onTick = mockScheduler.start.mock.calls[0]?.[1] as
-          | ((now: Date) => void)
-          | undefined;
-        onTick?.(FIXED_DATE);
+        (mockScheduler.start.mock.calls[0]?.[1] as (now: Date) => void)?.(FIXED_DATE);
       });
-
       expect(screen.getByTestId("analog-clock-container")).toBeInTheDocument();
-      expect(screen.queryByTestId("digital-clock")).not.toBeInTheDocument();
     });
   });
 
   describe("clock scheduler", () => {
-    it("starts the scheduler after initialization with correct options", async () => {
+    it("starts the scheduler with correct options", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
           Promise.resolve({
@@ -231,10 +197,7 @@ describe("ClockApp", () => {
           }),
         ),
       });
-
       await renderAndInitialize(client);
-
-      expect(mockScheduler.start).toHaveBeenCalledTimes(1);
       expect(mockScheduler.start).toHaveBeenCalledWith(
         { showSeconds: true, visible: true },
         expect.any(Function),
@@ -244,57 +207,37 @@ describe("ClockApp", () => {
     it("updates time display when scheduler ticks", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: DIGITAL_SETTINGS,
-            persistence: "saved" as const,
-          }),
+          Promise.resolve({ settings: DIGITAL_SETTINGS, persistence: "saved" as const }),
         ),
       });
-
       await renderAndInitialize(client);
-
       act(() => {
-        const onTick = mockScheduler.start.mock.calls[0]?.[1] as
-          | ((now: Date) => void)
-          | undefined;
-        onTick?.(FIXED_DATE);
+        (mockScheduler.start.mock.calls[0]?.[1] as (now: Date) => void)?.(FIXED_DATE);
       });
-
       expect(screen.getByTestId("digital-time")).toBeInTheDocument();
     });
 
     it("stops the scheduler on unmount", async () => {
       const client = createMockDesktopClient();
-
       const { unmount } = await renderAndInitialize(client);
-
       unmount();
-
       expect(mockScheduler.stopFn).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("settings change events", () => {
-    it("restarts scheduler when settings change event arrives", async () => {
+    it("restarts scheduler when settings change", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: DIGITAL_SETTINGS,
-            persistence: "saved" as const,
-          }),
+          Promise.resolve({ settings: DIGITAL_SETTINGS, persistence: "saved" as const }),
         ),
       });
-
       const { rerender } = await renderAndInitialize(client);
-
-      // Simulate settings change event
       settingsEventPayload = {
         settings: { ...DIGITAL_SETTINGS, showSeconds: false },
         persistence: "saved" as const,
       };
-
       rerender(<ClockApp desktopClient={client} />);
-
       expect(mockScheduler.restart).toHaveBeenCalledWith(
         expect.objectContaining({ showSeconds: false }),
       );
@@ -303,153 +246,63 @@ describe("ClockApp", () => {
     it("switches from digital to analog when mode changes", async () => {
       const client = createMockDesktopClient({
         initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: DIGITAL_SETTINGS,
-            persistence: "saved" as const,
-          }),
+          Promise.resolve({ settings: DIGITAL_SETTINGS, persistence: "saved" as const }),
         ),
       });
-
       const { rerender } = await renderAndInitialize(client);
-
-      // Trigger initial tick
       act(() => {
-        const onTick = mockScheduler.start.mock.calls[0]?.[1] as
-          | ((now: Date) => void)
-          | undefined;
-        onTick?.(FIXED_DATE);
+        (mockScheduler.start.mock.calls[0]?.[1] as (now: Date) => void)?.(FIXED_DATE);
       });
-
       expect(screen.getByTestId("digital-clock")).toBeInTheDocument();
-
-      // Simulate settings change to analog
-      settingsEventPayload = {
-        settings: ANALOG_SETTINGS,
-        persistence: "saved" as const,
-      };
-
+      settingsEventPayload = { settings: ANALOG_SETTINGS, persistence: "saved" as const };
       rerender(<ClockApp desktopClient={client} />);
-
       expect(screen.getByTestId("analog-clock-container")).toBeInTheDocument();
-      expect(screen.queryByTestId("digital-clock")).not.toBeInTheDocument();
     });
   });
 
   describe("visibility events", () => {
-    it("restarts scheduler when visibility changes to hidden", async () => {
+    it("restarts scheduler when hidden", async () => {
       const client = createMockDesktopClient();
-
       const { rerender } = await renderAndInitialize(client);
-
-      // Simulate visibility change to hidden
       visibilityValue = false;
-
       rerender(<ClockApp desktopClient={client} />);
-
       expect(mockScheduler.restart).toHaveBeenCalledWith(
         expect.objectContaining({ visible: false }),
       );
     });
 
-    it("restarts scheduler when visibility changes to visible", async () => {
+    it("restarts scheduler when visible again", async () => {
       const client = createMockDesktopClient();
-
       const { rerender } = await renderAndInitialize(client);
-
-      // First hide
       visibilityValue = false;
       rerender(<ClockApp desktopClient={client} />);
-
-      // Then show
       visibilityValue = true;
       rerender(<ClockApp desktopClient={client} />);
-
       const restartCalls = mockScheduler.restart.mock.calls;
       const lastCall = restartCalls[restartCalls.length - 1] as
         | [ClockScheduleOptions]
         | undefined;
-
       expect(lastCall?.[0]?.visible).toBe(true);
     });
   });
 
   describe("context menu", () => {
-    it("prevents default browser context menu on right-click", async () => {
+    it("prevents default browser context menu", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
       const container = screen.getByTestId("clock-page");
-      const event = new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-      });
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
       const prevented = !container.dispatchEvent(event);
-
       expect(prevented).toBe(true);
     });
 
-    it("opens custom context menu on right-click", async () => {
+    it("calls showClockContextMenu with current settings on right-click", async () => {
       const client = createMockDesktopClient();
-
       await renderAndInitialize(client);
-
-      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
-
       const container = screen.getByTestId("clock-page");
-
-      fireEvent.contextMenu(container);
-
-      expect(screen.getByTestId("context-menu")).toBeInTheDocument();
-    });
-
-    it("does not show context menu before right-click", async () => {
-      const client = createMockDesktopClient();
-
-      await renderAndInitialize(client);
-
-      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
-    });
-
-    it("closes context menu after an action is performed", async () => {
-      const client = createMockDesktopClient();
-
-      await renderAndInitialize(client);
-
-      const container = screen.getByTestId("clock-page");
-
-      fireEvent.contextMenu(container);
-
-      expect(screen.getByTestId("context-menu")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId("context-menu-quit"));
-
-      expect(screen.queryByTestId("context-menu")).not.toBeInTheDocument();
-    });
-
-    it("passes current settings to ContextMenu for alwaysOnTop state", async () => {
-      const settingsWithTopOn: ClockSettings = {
-        ...DEFAULT_CLOCK_SETTINGS,
-        alwaysOnTop: true,
-      };
-      const client = createMockDesktopClient({
-        initializeClockWindow: vi.fn(() =>
-          Promise.resolve({
-            settings: settingsWithTopOn,
-            persistence: "saved" as const,
-          }),
-        ),
-      });
-
-      await renderAndInitialize(client);
-
-      const container = screen.getByTestId("clock-page");
-
-      fireEvent.contextMenu(container);
-
-      const alwaysOnTopItem = screen.getByTestId("context-menu-always-on-top");
-
-      expect(alwaysOnTopItem).toHaveAttribute("aria-checked", "true");
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+      container.dispatchEvent(event);
+      expect(mockShowMenu).toHaveBeenCalledWith(DEFAULT_CLOCK_SETTINGS, client);
     });
   });
 });

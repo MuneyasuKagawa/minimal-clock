@@ -7,19 +7,105 @@ pub const SETTINGS_STORE_FILE_NAME: &str = "clock-settings.json";
 pub const CLOCK_SETTINGS_KEY: &str = "clockSettings";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ClockMode {
+pub enum ClockStyle {
+    #[serde(rename = "digital")]
     Digital,
-    Analog,
+    #[serde(rename = "analog-simple")]
+    AnalogSimple,
+    #[serde(rename = "analog-numbers")]
+    AnalogNumbers,
+    #[serde(rename = "analog-markers")]
+    AnalogMarkers,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DatePattern {
+    Ymd,
+    Md,
+    Japanese,
+    MdWeekday,
+    Dmy,
+}
+
+impl Default for DatePattern {
+    fn default() -> Self {
+        DatePattern::Ymd
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DateSeparator {
+    #[serde(rename = "/")]
+    Slash,
+    #[serde(rename = ".")]
+    Dot,
+    #[serde(rename = "-")]
+    Dash,
+}
+
+impl Default for DateSeparator {
+    fn default() -> Self {
+        DateSeparator::Slash
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DatePosition {
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+    TopLeft,
+}
+
+impl Default for DatePosition {
+    fn default() -> Self {
+        DatePosition::Bottom
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClockSettings {
-    pub mode: ClockMode,
+    pub clock_style: ClockStyle,
+    #[serde(default = "default_clock_size")]
+    pub clock_size: u32,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: u32,
+    #[serde(default = "default_letter_spacing")]
+    pub letter_spacing: u32,
     pub show_seconds: bool,
     pub hour24: bool,
     pub show_date: bool,
+    #[serde(default)]
+    pub date_pattern: DatePattern,
+    #[serde(default)]
+    pub date_separator: DateSeparator,
+    #[serde(default)]
+    pub date_position: DatePosition,
+    #[serde(default = "default_date_size")]
+    pub date_size: u32,
+    #[serde(default = "default_date_font_weight")]
+    pub date_font_weight: u32,
+    #[serde(default = "default_date_letter_spacing")]
+    pub date_letter_spacing: u32,
+    #[serde(default)]
+    pub blink_colon: bool,
+    #[serde(default = "default_show_border")]
+    pub show_border: bool,
+    #[serde(default = "default_show_border")]
+    pub show_clock_face: bool,
+    #[serde(default = "default_bg_color")]
+    pub bg_color: String,
+    #[serde(default = "default_opacity")]
+    pub bg_opacity: u32,
+    #[serde(default = "default_opacity")]
+    pub clock_opacity: u32,
     pub always_on_top: bool,
 }
 
@@ -126,23 +212,72 @@ impl<R: Runtime> SettingsBackend for TauriStoreBackend<R> {
     }
 }
 
+fn default_show_border() -> bool {
+    true
+}
+
+fn default_font_weight() -> u32 {
+    300
+}
+
+fn default_letter_spacing() -> u32 {
+    8
+}
+
+fn default_date_size() -> u32 {
+    10
+}
+
+fn default_date_font_weight() -> u32 {
+    300
+}
+
+fn default_date_letter_spacing() -> u32 {
+    8
+}
+
+fn default_opacity() -> u32 {
+    100
+}
+
+fn default_bg_color() -> String {
+    "#181820".to_string()
+}
+
+fn default_clock_size() -> u32 {
+    16
+}
+
 pub fn default_clock_settings() -> ClockSettings {
     ClockSettings {
-        mode: ClockMode::Digital,
+        clock_style: ClockStyle::Digital,
+        clock_size: default_clock_size(),
+        font_weight: default_font_weight(),
+        letter_spacing: default_letter_spacing(),
         show_seconds: true,
         hour24: true,
         show_date: false,
+        date_pattern: DatePattern::Ymd,
+        date_separator: DateSeparator::Slash,
+        date_position: DatePosition::Bottom,
+        date_size: default_date_size(),
+        date_font_weight: default_date_font_weight(),
+        date_letter_spacing: default_date_letter_spacing(),
+        blink_colon: false,
+        show_border: true,
+        show_clock_face: true,
+        bg_color: default_bg_color(),
+        bg_opacity: default_opacity(),
+        clock_opacity: default_opacity(),
         always_on_top: true,
     }
 }
 
 pub fn validate_clock_settings(value: Value) -> Option<ClockSettings> {
     let object = value.as_object()?;
-    let expected_keys = ["mode", "showSeconds", "hour24", "showDate", "alwaysOnTop"];
+    let required_keys = ["clockStyle", "showSeconds", "hour24", "showDate", "alwaysOnTop"];
 
-    if object.len() != expected_keys.len()
-        || !expected_keys.iter().all(|key| object.contains_key(*key))
-    {
+    if !required_keys.iter().all(|key| object.contains_key(*key)) {
         return None;
     }
 
@@ -192,26 +327,23 @@ mod tests {
 
     fn analog_settings() -> ClockSettings {
         ClockSettings {
-            mode: ClockMode::Analog,
+            clock_style: ClockStyle::AnalogSimple,
             show_seconds: false,
             hour24: false,
             show_date: true,
             always_on_top: false,
+            ..default_clock_settings()
         }
     }
 
     #[test]
     fn default_settings_match_initial_clock_display() {
-        assert_eq!(
-            default_clock_settings(),
-            ClockSettings {
-                mode: ClockMode::Digital,
-                show_seconds: true,
-                hour24: true,
-                show_date: false,
-                always_on_top: true,
-            }
-        );
+        let defaults = default_clock_settings();
+        assert_eq!(defaults.clock_style, ClockStyle::Digital);
+        assert!(defaults.show_seconds);
+        assert!(defaults.hour24);
+        assert!(!defaults.show_date);
+        assert!(defaults.always_on_top);
     }
 
     #[test]

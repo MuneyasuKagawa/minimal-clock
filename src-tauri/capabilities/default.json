@@ -7,6 +7,13 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "core:window:allow-start-dragging",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "core:menu:default",
     "allow-native-runtime-capabilities",
     "allow-initialize-clock-window",
     "allow-open-settings-window",

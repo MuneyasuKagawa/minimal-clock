@@ -3,7 +3,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 
 use crate::desktop_runtime::{
-    self, compute_initial_position, should_open_settings, ClockWindowState,
+    self, compute_initial_position, load_saved_position, should_open_settings, ClockWindowState,
     ClockWindowVisibilityPayload, DesktopError, RuntimeState, SettingsChangedPayload,
     CLOCK_WINDOW_LABEL, SETTINGS_CHANGED_EVENT, SETTINGS_WINDOW_LABEL, VISIBILITY_EVENT,
 };
@@ -50,10 +50,9 @@ pub fn initialize_clock_window(
         })?;
 
         if guard.window_state != ClockWindowState::HiddenUntilInitialized {
-            return Err(DesktopError {
-                kind: "runtime-failure".to_string(),
-                operation: "initialize_clock_window".to_string(),
-                message: "clock window already initialized".to_string(),
+            return Ok(SettingsChangedPayload {
+                settings: guard.settings.clone(),
+                persistence: guard.persistence.clone(),
             });
         }
 
@@ -64,26 +63,25 @@ pub fn initialize_clock_window(
         )
     };
 
-    // Compute position from primary monitor screen dimensions.
-    // Note: monitor.size() returns the full screen size, not the OS work area
-    // (Tauri v2 does not expose a work area API). PLACEMENT_MARGIN provides
-    // partial compensation for taskbar overlap.
-    let monitor_info = app.primary_monitor().ok().flatten();
-    let (screen_x, screen_y, screen_width) = match monitor_info {
-        Some(ref monitor) => {
-            let position = monitor.position();
-            let size = monitor.size();
-            let scale = monitor.scale_factor();
-            (
-                Some(position.x as f64),
-                Some(position.y as f64),
-                Some(size.width as f64 / scale),
-            )
-        }
-        None => (None, None, None),
+    let (x, y) = if let Some((sx, sy)) = load_saved_position(&app) {
+        (sx, sy)
+    } else {
+        let monitor_info = app.primary_monitor().ok().flatten();
+        let (screen_x, screen_y, screen_width) = match monitor_info {
+            Some(ref monitor) => {
+                let position = monitor.position();
+                let size = monitor.size();
+                let scale = monitor.scale_factor();
+                (
+                    Some(position.x as f64),
+                    Some(position.y as f64),
+                    Some(size.width as f64 / scale),
+                )
+            }
+            None => (None, None, None),
+        };
+        compute_initial_position(screen_x, screen_y, screen_width)
     };
-
-    let (x, y) = compute_initial_position(screen_x, screen_y, screen_width);
 
     main_window
         .set_position(tauri::LogicalPosition::new(x, y))

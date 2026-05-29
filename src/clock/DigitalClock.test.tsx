@@ -1,18 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ClockSettings } from "../domain/settings";
+import { DEFAULT_CLOCK_SETTINGS, type ClockSettings } from "../domain/settings";
 import { DigitalClock } from "./DigitalClock";
 
 function createSettings(overrides: Partial<ClockSettings> = {}): ClockSettings {
-  return {
-    mode: "digital",
-    showSeconds: true,
-    hour24: true,
-    showDate: false,
-    alwaysOnTop: true,
-    ...overrides
-  };
+  return { ...DEFAULT_CLOCK_SETTINGS, ...overrides };
 }
 
 describe("DigitalClock", () => {

@@ -133,11 +133,11 @@ describe("DesktopClient", () => {
 
   describe("applySettings", () => {
     const customSettings: ClockSettings = {
-      mode: "analog",
+      ...DEFAULT_CLOCK_SETTINGS,
+      clockStyle: "analog-simple",
       showSeconds: false,
       hour24: false,
       showDate: true,
-      alwaysOnTop: true
     };
 
     const appliedPayload: SettingsChangedPayload = {

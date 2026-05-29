@@ -1,18 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ClockSettings } from "../domain/settings";
+import { DEFAULT_CLOCK_SETTINGS, type ClockSettings } from "../domain/settings";
 import { AnalogClock } from "./AnalogClock";
 
 function createSettings(overrides: Partial<ClockSettings> = {}): ClockSettings {
-  return {
-    mode: "analog",
-    showSeconds: true,
-    hour24: true,
-    showDate: false,
-    alwaysOnTop: true,
-    ...overrides
-  };
+  return { ...DEFAULT_CLOCK_SETTINGS, clockStyle: "analog-simple", ...overrides };
 }
 
 describe("AnalogClock", () => {
@@ -31,7 +24,7 @@ describe("AnalogClock", () => {
 
       render(<AnalogClock now={now} settings={createSettings()} />);
 
-      const face = screen.getByTestId("analog-face");
+      const face = screen.getByTestId("analog-bg");
       expect(face.tagName.toLowerCase()).toBe("circle");
     });
   });
@@ -196,16 +189,16 @@ describe("AnalogClock", () => {
     });
   });
 
-  describe("does not render minute hand seconds influence when seconds hidden", () => {
-    it("minute hand ignores seconds when showSeconds is false", () => {
-      // 15 minutes 30 seconds, but showSeconds false => 90 degrees (no seconds contribution)
+  describe("minute hand always reflects seconds", () => {
+    it("minute hand includes seconds contribution regardless of showSeconds", () => {
+      // 15 minutes 30 seconds => 90 + 3 = 93 degrees
       const now = new Date(2026, 4, 28, 3, 15, 30);
 
       render(<AnalogClock now={now} settings={createSettings({ showSeconds: false })} />);
 
       const minuteHand = screen.getByTestId("analog-minute-hand");
       const transform = minuteHand.getAttribute("transform");
-      expect(transform).toContain("rotate(90");
+      expect(transform).toContain("rotate(93");
     });
   });
 });
