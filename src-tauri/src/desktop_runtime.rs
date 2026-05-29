@@ -36,7 +36,6 @@ const CLOCK_WINDOW_WIDTH: f64 = 220.0;
 pub enum ClockWindowState {
     HiddenUntilInitialized,
     Visible,
-    HiddenToTray,
     Exiting,
 }
 
@@ -94,7 +93,7 @@ pub enum RestoreClockResult {
 /// Does NOT mutate state — caller applies the transition.
 pub fn resolve_restore_clock(state: &AppliedState) -> RestoreClockResult {
     match state.window_state {
-        ClockWindowState::HiddenToTray | ClockWindowState::HiddenUntilInitialized => {
+        ClockWindowState::HiddenUntilInitialized => {
             RestoreClockResult::Restored {
                 payload: SettingsChangedPayload {
                     settings: state.settings.clone(),
@@ -176,7 +175,7 @@ pub fn compute_initial_position(
 pub fn init_applied_state(load_result: SettingsLoadResult) -> AppliedState {
     let (settings, persistence) = match load_result {
         SettingsLoadResult::Loaded { settings } => (settings, "saved".to_string()),
-        SettingsLoadResult::Defaulted { settings, .. } => (settings, "saved".to_string()),
+        SettingsLoadResult::Defaulted { settings, .. } => (settings, "volatile".to_string()),
     };
 
     AppliedState {
@@ -553,12 +552,9 @@ mod tests {
             ClockWindowState::HiddenUntilInitialized,
             ClockWindowState::Visible
         );
+        assert_ne!(ClockWindowState::Visible, ClockWindowState::Exiting);
         assert_ne!(
-            ClockWindowState::Visible,
-            ClockWindowState::HiddenToTray
-        );
-        assert_ne!(
-            ClockWindowState::HiddenToTray,
+            ClockWindowState::HiddenUntilInitialized,
             ClockWindowState::Exiting
         );
     }
@@ -627,8 +623,8 @@ mod tests {
     }
 
     #[test]
-    fn restore_from_hidden_to_tray_produces_restored_with_settings_payload() {
-        let state = make_state(ClockWindowState::HiddenToTray);
+    fn restore_from_hidden_until_initialized_produces_restored_with_settings_payload() {
+        let state = make_state(ClockWindowState::HiddenUntilInitialized);
 
         let result = resolve_restore_clock(&state);
 
@@ -641,15 +637,6 @@ mod tests {
                 },
             }
         );
-    }
-
-    #[test]
-    fn restore_from_hidden_until_initialized_produces_restored() {
-        let state = make_state(ClockWindowState::HiddenUntilInitialized);
-
-        let result = resolve_restore_clock(&state);
-
-        assert!(matches!(result, RestoreClockResult::Restored { .. }));
     }
 
     #[test]
@@ -675,7 +662,7 @@ mod tests {
         let state = AppliedState {
             settings: default_clock_settings(),
             persistence: "volatile".to_string(),
-            window_state: ClockWindowState::HiddenToTray,
+            window_state: ClockWindowState::HiddenUntilInitialized,
         };
 
         let result = resolve_restore_clock(&state);
@@ -693,13 +680,6 @@ mod tests {
     #[test]
     fn quit_from_visible_produces_exit() {
         let state = make_state(ClockWindowState::Visible);
-
-        assert_eq!(resolve_quit(&state), QuitResult::Exit);
-    }
-
-    #[test]
-    fn quit_from_hidden_to_tray_produces_exit() {
-        let state = make_state(ClockWindowState::HiddenToTray);
 
         assert_eq!(resolve_quit(&state), QuitResult::Exit);
     }
@@ -723,13 +703,6 @@ mod tests {
     #[test]
     fn settings_allowed_when_visible() {
         let state = make_state(ClockWindowState::Visible);
-
-        assert!(should_open_settings(&state));
-    }
-
-    #[test]
-    fn settings_allowed_when_hidden_to_tray() {
-        let state = make_state(ClockWindowState::HiddenToTray);
 
         assert!(should_open_settings(&state));
     }
