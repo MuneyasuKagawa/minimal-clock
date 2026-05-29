@@ -76,8 +76,56 @@ jobs:
           $VERSION = "${{ needs.check-version.outputs.version }}"
           aws s3 cp "Minimal Clock_${VERSION}_x64-setup.exe" "s3://minimal-clock-releases/Minimal Clock_${VERSION}_x64-setup.exe"
 
+  build-macos:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: macos-latest
+    outputs:
+      signature_aarch64: ${{ steps.sig.outputs.signature_aarch64 }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (aarch64)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target aarch64-apple-darwin
+
+      - name: Read signature
+        id: sig
+        shell: bash
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          SIG=$(cat "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Minimal Clock.app.tar.gz.sig")
+          echo "signature_aarch64=$SIG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-northeast-1
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          aws s3 cp "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Minimal Clock_${VERSION}_aarch64.dmg" "s3://minimal-clock-releases/Minimal Clock_${VERSION}_aarch64.dmg"
+          aws s3 cp "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Minimal Clock.app.tar.gz" "s3://minimal-clock-releases/Minimal Clock_${VERSION}_aarch64.app.tar.gz"
+
   publish:
-    needs: [check-version, build-windows]
+    needs: [check-version, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Generate and upload latest.json
@@ -87,6 +135,7 @@ jobs:
           AWS_DEFAULT_REGION: ap-northeast-1
           VERSION: ${{ needs.check-version.outputs.version }}
           SIG_WIN: ${{ needs.build-windows.outputs.signature }}
+          SIG_MAC: ${{ needs.build-macos.outputs.signature_aarch64 }}
         run: |
           cat > latest.json << EOF
           {
@@ -97,6 +146,10 @@ jobs:
               "windows-x86_64": {
                 "signature": "${SIG_WIN}",
                 "url": "https://minimal-clock-releases.s3.ap-northeast-1.amazonaws.com/Minimal+Clock_${VERSION}_x64-setup.exe"
+              },
+              "darwin-aarch64": {
+                "signature": "${SIG_MAC}",
+                "url": "https://minimal-clock-releases.s3.ap-northeast-1.amazonaws.com/Minimal+Clock_${VERSION}_aarch64.app.tar.gz"
               }
             }
           }
