@@ -43,11 +43,16 @@ pub fn initialize_clock_window(
         })?;
 
     let (always_on_top, settings, persistence) = {
-        let guard = state.lock().map_err(|_| DesktopError {
+        let mut guard = state.lock().map_err(|_| DesktopError {
             kind: "runtime-failure".to_string(),
             operation: "initialize_clock_window".to_string(),
             message: "failed to acquire runtime state lock".to_string(),
         })?;
+
+        // Load saved settings on first access. Guards the startup race where the
+        // clock webview reaches this command before the setup hook has loaded
+        // them — without this, the clock would boot with default settings.
+        desktop_runtime::ensure_settings_loaded(&app, &mut guard);
 
         if guard.window_state != ClockWindowState::HiddenUntilInitialized {
             return Ok(SettingsChangedPayload {
@@ -167,13 +172,18 @@ pub fn quit_application(app: AppHandle) {
 
 #[tauri::command]
 pub fn get_applied_settings(
+    app: AppHandle,
     state: State<'_, RuntimeState>,
 ) -> Result<SettingsChangedPayload, DesktopError> {
-    let guard = state.lock().map_err(|_| DesktopError {
+    let mut guard = state.lock().map_err(|_| DesktopError {
         kind: "runtime-failure".to_string(),
         operation: "get_applied_settings".to_string(),
         message: "failed to acquire runtime state lock".to_string(),
     })?;
+
+    // Load saved settings on first access — the settings window can reach this
+    // command before the setup hook has loaded them at startup.
+    desktop_runtime::ensure_settings_loaded(&app, &mut guard);
 
     Ok(SettingsChangedPayload {
         settings: guard.settings.clone(),

@@ -44,6 +44,13 @@ pub struct AppliedState {
     pub settings: ClockSettings,
     pub persistence: String,
     pub window_state: ClockWindowState,
+    /// Whether `settings`/`persistence` have been loaded from the persistent
+    /// store yet. The initial managed state starts `false` (placeholder
+    /// defaults) and is flipped to `true` the first time settings are loaded —
+    /// see [`ensure_settings_loaded`]. This guards against a startup race where
+    /// the clock webview invokes `initialize_clock_window` before the setup
+    /// hook has loaded the saved settings.
+    pub initialized: bool,
 }
 
 pub type RuntimeState = Mutex<AppliedState>;
@@ -170,18 +177,27 @@ pub fn compute_initial_position(
     }
 }
 
-/// Initializes the AppliedState from a SettingsLoadResult.
-/// Returns the initial state and the persistence string.
-pub fn init_applied_state(load_result: SettingsLoadResult) -> AppliedState {
-    let (settings, persistence) = match load_result {
+/// Maps a load result to the applied `(settings, persistence)` pair.
+/// Loaded settings are persistent ("saved"); defaulted settings are "volatile".
+fn settings_and_persistence(load_result: SettingsLoadResult) -> (ClockSettings, String) {
+    match load_result {
         SettingsLoadResult::Loaded { settings } => (settings, "saved".to_string()),
         SettingsLoadResult::Defaulted { settings, .. } => (settings, "volatile".to_string()),
-    };
+    }
+}
+
+/// Builds an initialized AppliedState from a SettingsLoadResult.
+/// Test-only helper covering the load-result → applied-state mapping; production
+/// code loads lazily via [`ensure_settings_loaded`].
+#[cfg(test)]
+pub fn init_applied_state(load_result: SettingsLoadResult) -> AppliedState {
+    let (settings, persistence) = settings_and_persistence(load_result);
 
     AppliedState {
         settings,
         persistence,
         window_state: ClockWindowState::HiddenUntilInitialized,
+        initialized: true,
     }
 }
 
@@ -201,6 +217,7 @@ pub fn create_initial_runtime_state() -> RuntimeState {
         settings: default_clock_settings(),
         persistence: "volatile".to_string(),
         window_state: ClockWindowState::HiddenUntilInitialized,
+        initialized: false,
     })
 }
 
@@ -387,10 +404,10 @@ pub fn exit_application(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
-/// Loads settings from the store and initializes the runtime applied state.
-/// Called during app setup before the clock window is shown.
-pub fn initialize_applied_state(app: &App) -> Result<()> {
-    let load_result = match app.store(SETTINGS_STORE_FILE_NAME) {
+/// Reads the persisted settings from the store, falling back to defaults if the
+/// store is unavailable or the saved value is missing/invalid.
+fn load_settings_from_store(app: &tauri::AppHandle) -> SettingsLoadResult {
+    match app.store(SETTINGS_STORE_FILE_NAME) {
         Ok(store) => {
             let backend = TauriStoreBackend::new(store);
             let settings_store = PersistentSettingsStore::new(backend);
@@ -405,14 +422,38 @@ pub fn initialize_applied_state(app: &App) -> Result<()> {
             settings: default_clock_settings(),
             reason: crate::settings_store::SettingsDefaultReason::Unavailable,
         },
-    };
+    }
+}
 
-    let initial_state = init_applied_state(load_result);
+/// Loads the saved settings into `guard` exactly once (idempotent).
+///
+/// Both the setup hook ([`initialize_applied_state`]) and the frontend-facing
+/// commands (`initialize_clock_window`, `get_applied_settings`) call this before
+/// reading settings. Whichever runs first performs the load and marks the state
+/// initialized; the rest short-circuit. This makes settings restoration
+/// independent of whether the setup hook or the clock webview wins the startup
+/// race — the fix for the clock booting with default settings.
+///
+/// Only `settings`/`persistence` are touched; `window_state` is left untouched
+/// so an already-shown window is not reset.
+pub fn ensure_settings_loaded(app: &tauri::AppHandle, guard: &mut AppliedState) {
+    if guard.initialized {
+        return;
+    }
 
+    let (settings, persistence) = settings_and_persistence(load_settings_from_store(app));
+    guard.settings = settings;
+    guard.persistence = persistence;
+    guard.initialized = true;
+}
+
+/// Loads settings from the store into the runtime applied state during app
+/// setup. Idempotent via [`ensure_settings_loaded`]: if the clock webview
+/// already triggered the load, this is a no-op.
+pub fn initialize_applied_state(app: &App) -> Result<()> {
     let state = app.state::<RuntimeState>();
     let mut guard = state.lock().expect("runtime state lock poisoned");
-    *guard = initial_state;
-
+    ensure_settings_loaded(app.handle(), &mut guard);
     Ok(())
 }
 
@@ -586,6 +627,27 @@ mod tests {
         assert_eq!(guard.window_state, ClockWindowState::HiddenUntilInitialized);
     }
 
+    #[test]
+    fn initial_runtime_state_is_not_yet_loaded_from_store() {
+        // The managed state starts uninitialized so that the first command to
+        // read settings (whether the setup hook or the clock webview) triggers
+        // the store load. Guards the regression where the clock booted with
+        // default settings because it read the state before setup loaded it.
+        let state = create_initial_runtime_state();
+        let guard = state.lock().unwrap();
+
+        assert!(!guard.initialized);
+    }
+
+    #[test]
+    fn init_applied_state_marks_state_initialized() {
+        let state = init_applied_state(SettingsLoadResult::Loaded {
+            settings: default_clock_settings(),
+        });
+
+        assert!(state.initialized);
+    }
+
     // --- SettingsChangedPayload tests ---
 
     #[test]
@@ -619,6 +681,7 @@ mod tests {
             settings: default_clock_settings(),
             persistence: "saved".to_string(),
             window_state,
+            initialized: true,
         }
     }
 
@@ -663,6 +726,7 @@ mod tests {
             settings: default_clock_settings(),
             persistence: "volatile".to_string(),
             window_state: ClockWindowState::HiddenUntilInitialized,
+            initialized: true,
         };
 
         let result = resolve_restore_clock(&state);
